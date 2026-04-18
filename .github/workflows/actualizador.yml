@@ -2,30 +2,40 @@ name: Actualizar Listas Diariamente
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 * * * *' # Se ejecuta cada hora
   workflow_dispatch: 
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Esto asegura permiso de escritura
+      contents: write
     steps:
       - name: Checkout del repositorio
-        uses: actions/checkout@v4 # Actualizado a v4 (Node 24)
+        uses: actions/checkout@v4
 
-      - name: Descargar lista de IPFS
+      - name: Descargar lista de IPFS y Actualizar Todo
         run: |
+          # 1. Descargamos la lista maestra
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           
-          # Solo copiar a los amigos si el archivo ya existe (para evitar errores)
-          [ -f manuel.m3u ] && cp maestra.m3u manuel.m3u
-          # Añade aquí más amigos siguiendo el mismo formato
+          # 2. Buscamos todos los archivos .m3u de tus amigos y los actualizamos de golpe
+          # Esto evita errores si el archivo no existe y actualiza todos los que sí existen
+          for file in *.m3u; do
+            if [ "$file" != "maestra.m3u" ]; then
+              cp maestra.m3u "$file"
+              echo "Actualizado: $file"
+            fi
+          done
 
       - name: Guardar cambios automáticamente
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add .
-          # El commit solo se hace si hay cambios reales
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Lista actualizada desde IPFS" && git push)
+          # Solo guarda si realmente hay cambios para evitar errores de commit vacío
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Actualización masiva de listas" && git push)
+          
