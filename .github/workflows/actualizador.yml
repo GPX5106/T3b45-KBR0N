@@ -1,0 +1,30 @@
+name: Actualizar Listas Diariamente
+
+on:
+  schedule:
+    # Se ejecutará cada 6 horas (puedes ajustarlo)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Permite ejecutarlo manualmente con un botón
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v3
+
+      - name: Descargar lista de IPFS
+        run: |
+          curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
+          # Aquí copiamos la maestra a los archivos de tus amigos
+          cp maestra.m3u juan.m3u
+          cp maestra.m3u pedro.m3u
+
+      - name: Guardar cambios automáticamente
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .
+          git commit -m "Lista actualizada desde IPFS automáticamente" || exit 0
+          git push
+          
