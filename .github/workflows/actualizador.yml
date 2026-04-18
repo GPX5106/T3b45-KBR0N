@@ -19,8 +19,7 @@ jobs:
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           
           # Solo copiar a los amigos si el archivo ya existe (para evitar errores)
-          [ -f juan.m3u ] && cp maestra.m3u juan.m3u
-          [ -f pedro.m3u ] && cp maestra.m3u pedro.m3u
+          [ -f manuel.m3u ] && cp maestra.m3u manuel.m3u
           # Añade aquí más amigos siguiendo el mismo formato
 
       - name: Guardar cambios automáticamente
