@@ -86,4 +86,12 @@ jobs:
 
       - name: Guardar cambios automáticamente
         run: |
-          git config --local user.email "github-actions[bot]@users
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m "Sincronización inteligente (Local/Servidor): $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+          else
+            echo "Sin cambios (no hay usuarios nuevos)."
+          fi
