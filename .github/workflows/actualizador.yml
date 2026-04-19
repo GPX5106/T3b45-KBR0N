@@ -55,9 +55,29 @@ jobs:
             FECHA_LIMITE_FIN_DIA=$((FECHA_LIMITE_SEC + 86399))
 
             if [ "$FECHA_LIMITE_FIN_DIA" -ge "$AHORA" ]; then
+              FILE_NAME="${USER}.m3u"
               echo "✅ $USER activo hasta el $FECHA_FIN"
-              echo "# Lista para $USER - EXPIRA: $FECHA_FIN - Actualizada: $(date +'%d/%m/%Y %H:%M')" > "${USER}.m3u"
-              cat lista_servidor.m3u >> "${USER}.m3u"
+              
+              # Si el archivo NO existe antes de crearlo, es que es un alta nueva
+              if [ ! -f "$FILE_NAME" ]; then
+                ES_NUEVO=true
+              else
+                ES_NUEVO=false
+              fi
+
+              echo "# Lista para $USER - EXPIRA: $FECHA_FIN - Actualizada: $(date +'%d/%m/%Y %H:%M')" > "$FILE_NAME"
+              cat lista_servidor.m3u >> "$FILE_NAME"
+
+              # Si es un alta nueva, enviamos el mensaje a Telegram
+              if [ "$ES_NUEVO" = true ]; then
+                RAW_URL="https://raw.githubusercontent.com/${{ github.repository }}/main/${FILE_NAME}"
+                MESSAGE="🚀 *¡Nueva lista generada!*%0A%0A👤 *Usuario:* ${USER}%0A📅 *Vence:* ${FECHA_FIN}%0A%0A🔗 *Enlace Raw:*%0A\`${RAW_URL}\`"
+                
+                curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+                  -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+                  -d "text=${MESSAGE}" \
+                  -d "parse_mode=Markdown"
+              fi
             else
               echo "⚠️ $USER ha caducado el $FECHA_FIN. Omitiendo."
             fi
@@ -72,7 +92,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           if ! git diff --cached --quiet; then
-            git commit -m "Sincronización Forms: $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Sincronización Forms y Notificación: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           else
             echo "Sin cambios en los accesos."
