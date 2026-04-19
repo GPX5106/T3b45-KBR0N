@@ -25,68 +25,59 @@ jobs:
           # 1. Descargar la lista maestra original
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           
-          # 2. Crear la versión base para el servidor (tu IP de Tailscale)
-          sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u | tr -d '\r' > lista_servidor.m3u
-
-          # 3. Descargar base de datos de usuarios desde Google Sheets
+          # 2. Descargar base de datos de usuarios desde Google Sheets
           curl -L "$URL_EXCEL" -o usuarios.csv
 
-          # 4. LIMPIEZA: Borramos todos los archivos de usuarios anteriores
-          find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" ! -name "lista_servidor.m3u" -delete
+          # 3. LIMPIEZA: Borramos todos los archivos m3u de usuarios (excepto la maestra)
+          find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" -delete
 
-          # 5. GENERACIÓN POR FECHA DE VENCIMIENTO
+          # 4. GENERACIÓN POR FECHA DE VENCIMIENTO
           AHORA=$(date +%s)
 
-          # Leemos 3 columnas: A (basura/tiempo), B (nombre), C (vencimiento)
           tail -n +2 usuarios.csv | while IFS=',' read -r basura nombre vencimiento || [ -n "$nombre" ]; do
             
-            # Limpiamos los datos
             USER=$(echo "$nombre" | xargs | tr '[:upper:]' '[:lower:]' | tr -d '\r')
             FECHA_FIN=$(echo "$vencimiento" | xargs | tr -d '\r')
 
-            # Saltar si el nombre está vacío
             [ -z "$USER" ] && continue
 
-            # Convertimos DD/MM/AAAA a AAAA-MM-DD
             FECHA_ISO=$(echo "$FECHA_FIN" | awk -F'/' '{print $3"-"$2"-"$1}')
-            
-            # Convertimos a segundos y damos margen hasta el final del día
             FECHA_LIMITE_SEC=$(date -d "$FECHA_ISO" +%s 2>/dev/null || echo 0)
             FECHA_LIMITE_FIN_DIA=$((FECHA_LIMITE_SEC + 86399))
 
             if [ "$FECHA_LIMITE_FIN_DIA" -ge "$AHORA" ]; then
-              FILE_NAME="${USER}.m3u"
-              echo "✅ $USER activo hasta el $FECHA_FIN"
+              FILE_LOCAL="${USER}(local).m3u"
+              FILE_SERVI="${USER}(servidor).m3u"
               
-              # Lógica para detectar si es un alta nueva (no existe el archivo en el repo)
-              if [ ! -f "$FILE_NAME" ]; then
-                ES_NUEVO=true
-              else
-                ES_NUEVO=false
-              fi
+              # Detectar si es nuevo (basándonos en el archivo local)
+              if [ ! -f "$FILE_LOCAL" ]; then ES_NUEVO=true; else ES_NUEVO=false; fi
 
-              echo "# Lista para $USER - EXPIRA: $FECHA_FIN - Actualizada: $(date +'%d/%m/%Y %H:%M')" > "$FILE_NAME"
-              cat lista_servidor.m3u >> "$FILE_NAME"
+              echo "✅ Procesando $USER (Vence: $FECHA_FIN)"
 
-              # Si es un alta nueva, enviamos el mensaje a Telegram usando HTML
+              # Crear archivo LOCAL (127.0.0.1)
+              echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "$FILE_LOCAL"
+              cat maestra.m3u >> "$FILE_LOCAL"
+
+              # Crear archivo SERVIDOR (IP Tailscale)
+              echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "$FILE_SERVI"
+              sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "$FILE_SERVI"
+
+              # Notificar si es nuevo
               if [ "$ES_NUEVO" = true ]; then
-                RAW_URL="https://raw.githubusercontent.com/${{ github.repository }}/main/${FILE_NAME}"
+                URL_L="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_LOCAL | sed 's/(/%28/g; s/)/%29/g')"
+                URL_S="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_SERVI | sed 's/(/%28/g; s/)/%29/g')"
                 
-                # Mensaje formateado en HTML para evitar fallos con guiones bajos (_)
-                MESSAGE="🚀 <b>¡Nueva lista generada!</b>%0A%0A👤 <b>Usuario:</b> ${USER}%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🔗 <b>Enlace Raw:</b>%0A<code>${RAW_URL}</code>"
+                MESSAGE="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>Enlace LOCAL (Su AceStream):</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>Enlace SERVIDOR (Tu Tailscale):</b>%0A<code>${URL_S}</code>"
                 
                 curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
                   -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
                   -d "text=${MESSAGE}" \
                   -d "parse_mode=HTML"
               fi
-            else
-              echo "⚠️ $USER ha caducado el $FECHA_FIN. Omitiendo."
             fi
           done
 
-          # Limpieza de archivos temporales
-          rm lista_servidor.m3u usuarios.csv
+          rm maestra.m3u usuarios.csv
 
       - name: Guardar cambios automáticamente
         run: |
@@ -94,8 +85,6 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           if ! git diff --cached --quiet; then
-            git commit -m "Sincronización Forms y Notificación: $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Doble lista y notificación: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
-          else
-            echo "Sin cambios en los accesos."
           fi
