@@ -7,7 +7,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=0&single=true&output=csv"
+  URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=2124629301&single=true&output=csv"
 
 jobs:
   build:
@@ -35,23 +35,22 @@ jobs:
           find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" ! -name "lista_servidor.m3u" -delete
 
           # 5. GENERACIÓN POR FECHA DE VENCIMIENTO
-          # Fecha actual en segundos
           AHORA=$(date +%s)
 
-          # Leemos Nombre (Col A) y Fecha Vencimiento (Col B)
-          # Formato esperado en Excel: DD/MM/AAAA
-          tail -n +2 usuarios.csv | while IFS=',' read -r nombre vencimiento || [ -n "$nombre" ]; do
+          # Leemos 3 columnas: A (basura/tiempo), B (nombre), C (vencimiento)
+          tail -n +2 usuarios.csv | while IFS=',' read -r basura nombre vencimiento || [ -n "$nombre" ]; do
             
+            # Limpiamos los datos
             USER=$(echo "$nombre" | xargs | tr '[:upper:]' '[:lower:]' | tr -d '\r')
             FECHA_FIN=$(echo "$vencimiento" | xargs | tr -d '\r')
 
+            # Saltar si el nombre está vacío
             [ -z "$USER" ] && continue
 
-            # Convertimos DD/MM/AAAA a formato entendible por 'date' (AAAA-MM-DD)
+            # Convertimos DD/MM/AAAA a AAAA-MM-DD
             FECHA_ISO=$(echo "$FECHA_FIN" | awk -F'/' '{print $3"-"$2"-"$1}')
             
-            # Convertimos la fecha de vencimiento a segundos
-            # Sumamos 86399 segundos para que el acceso dure hasta el final del día marcado
+            # Convertimos a segundos y damos margen hasta el final del día
             FECHA_LIMITE_SEC=$(date -d "$FECHA_ISO" +%s 2>/dev/null || echo 0)
             FECHA_LIMITE_FIN_DIA=$((FECHA_LIMITE_SEC + 86399))
 
@@ -60,7 +59,7 @@ jobs:
               echo "# Lista para $USER - EXPIRA: $FECHA_FIN - Actualizada: $(date +'%d/%m/%Y %H:%M')" > "${USER}.m3u"
               cat lista_servidor.m3u >> "${USER}.m3u"
             else
-              echo "⚠️ $USER ha caducado el $FECHA_FIN. Eliminando acceso."
+              echo "⚠️ $USER ha caducado el $FECHA_FIN. Omitiendo."
             fi
           done
 
@@ -73,8 +72,8 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           if ! git diff --cached --quiet; then
-            git commit -m "Sincronización por Vencimiento: $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Sincronización Forms: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           else
-            echo "Sin cambios en los accesos (todo sigue igual)."
+            echo "Sin cambios en los accesos."
           fi
