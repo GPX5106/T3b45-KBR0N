@@ -17,25 +17,29 @@ jobs:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
 
-      - name: Descargar lista de IPFS y Actualizar Todo
+      - name: Procesar Listas
         run: |
-          # 1. Descargamos la lista maestra
+          # 1. Descargamos la lista original (la que tiene 127.0.0.1)
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           
-          # 2. Buscamos todos los archivos .m3u de tus amigos y los actualizamos de golpe
-          # Esto evita errores si el archivo no existe y actualiza todos los que sí existen
-          for file in *.m3u; do
-            if [ "$file" != "maestra.m3u" ]; then
-              cp maestra.m3u "$file"
-              echo "Actualizado: $file"
-            fi
-          done
+          # 2. Creamos una versión especial para el servidor de Tailscale
+          # Reemplazamos 127.0.0.1 por tu IP de Tailscale
+          sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u > lista_servidor.m3u
+
+          # 3. ASIGNACIÓN PERSONALIZADA
+          # Aquí tú eliges qué versión le das a cada archivo:
+
+          # Amigos que usan SU PROPIO motor (Lista Normal):
+          
+
+          # Amigos que usan TU PC (Lista Servidor):
+          [ -f manuel.m3u ] && cp lista_servidor.m3u manuel.m3u
+          
+          # Nota: 'maestra.m3u' se queda como la normal por defecto.
 
       - name: Guardar cambios automáticamente
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add .
-          # Solo guarda si realmente hay cambios para evitar errores de commit vacío
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Actualización masiva de listas" && git push)
-          
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Actualización personalizada de listas" && git push)
