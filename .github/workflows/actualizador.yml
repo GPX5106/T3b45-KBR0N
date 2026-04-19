@@ -28,7 +28,7 @@ jobs:
           # 2. Descargar base de datos de usuarios desde Google Sheets
           curl -L "$URL_EXCEL" -o usuarios.csv
 
-          # 3. LIMPIEZA: Borramos todos los archivos m3u de usuarios (excepto la maestra)
+          # 3. LIMPIEZA: Borramos los archivos de usuarios, pero MANTENEMOS la maestra.m3u
           find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" -delete
 
           # 4. GENERACIÓN POR FECHA DE VENCIMIENTO
@@ -36,12 +36,17 @@ jobs:
 
           tail -n +2 usuarios.csv | while IFS=',' read -r basura nombre vencimiento || [ -n "$nombre" ]; do
             
+            # Limpiamos los datos
             USER=$(echo "$nombre" | xargs | tr '[:upper:]' '[:lower:]' | tr -d '\r')
             FECHA_FIN=$(echo "$vencimiento" | xargs | tr -d '\r')
 
+            # Saltar si el nombre está vacío
             [ -z "$USER" ] && continue
 
+            # Convertimos DD/MM/AAAA a AAAA-MM-DD
             FECHA_ISO=$(echo "$FECHA_FIN" | awk -F'/' '{print $3"-"$2"-"$1}')
+            
+            # Convertimos a segundos y damos margen hasta el final del día
             FECHA_LIMITE_SEC=$(date -d "$FECHA_ISO" +%s 2>/dev/null || echo 0)
             FECHA_LIMITE_FIN_DIA=$((FECHA_LIMITE_SEC + 86399))
 
@@ -49,21 +54,26 @@ jobs:
               FILE_LOCAL="${USER}(local).m3u"
               FILE_SERVI="${USER}(servidor).m3u"
               
-              # Detectar si es nuevo (basándonos en el archivo local)
-              if [ ! -f "$FILE_LOCAL" ]; then ES_NUEVO=true; else ES_NUEVO=false; fi
+              # Detectar si es un alta nueva mirando si ya existe el archivo local
+              if [ ! -f "$FILE_LOCAL" ]; then
+                ES_NUEVO=true
+              else
+                ES_NUEVO=false
+              fi
 
               echo "✅ Procesando $USER (Vence: $FECHA_FIN)"
 
-              # Crear archivo LOCAL (127.0.0.1)
+              # Crear archivo LOCAL (Copia exacta de la maestra con 127.0.0.1)
               echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "$FILE_LOCAL"
               cat maestra.m3u >> "$FILE_LOCAL"
 
-              # Crear archivo SERVIDOR (IP Tailscale)
+              # Crear archivo SERVIDOR (Cambiando IP a Tailscale)
               echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "$FILE_SERVI"
               sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "$FILE_SERVI"
 
-              # Notificar si es nuevo
+              # Si es un alta nueva, enviamos los dos enlaces a Telegram
               if [ "$ES_NUEVO" = true ]; then
+                # Codificamos paréntesis para la URL
                 URL_L="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_LOCAL | sed 's/(/%28/g; s/)/%29/g')"
                 URL_S="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_SERVI | sed 's/(/%28/g; s/)/%29/g')"
                 
@@ -74,10 +84,13 @@ jobs:
                   -d "text=${MESSAGE}" \
                   -d "parse_mode=HTML"
               fi
+            else
+              echo "⚠️ $USER ha caducado el $FECHA_FIN. Omitiendo."
             fi
           done
 
-          rm maestra.m3u usuarios.csv
+          # Limpieza de archivo temporal de usuarios (maestra.m3u se queda en el repo)
+          rm usuarios.csv
 
       - name: Guardar cambios automáticamente
         run: |
@@ -85,6 +98,8 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           if ! git diff --cached --quiet; then
-            git commit -m "Doble lista y notificación: $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Doble lista (Local/Servidor) y Notificación: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
+          else
+            echo "Sin cambios en los accesos."
           fi
