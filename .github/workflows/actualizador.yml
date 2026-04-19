@@ -16,30 +16,38 @@ jobs:
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Procesar Listas
         run: |
-          # 1. Descargar la lista
+          # 1. Descargar la lista maestra original
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           
-          # 2. Crear la versión de servidor limpiando caracteres extraños
-          # Usamos 'tr' para asegurar que los saltos de línea sean correctos
+          # 2. Crear la versión para tu servidor (Tailscale IP)
+          # Limpiamos retornos de carro (\r) para que sea compatible con todo
           sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u | tr -d '\r' > lista_servidor.m3u
 
-          # 3. ASIGNACIÓN PERSONALIZADA
-          # Aquí tú eliges qué versión le das a cada archivo:
-
-          # Amigos que usan SU PROPIO motor (Lista Normal):
+          # 3. ASIGNACIÓN FORZADA (Crea los archivos aunque no existan)
           
-
-          # Amigos que usan TU PC (Lista Servidor):
-          [ -f manuel.m3u ] && cp lista_servidor.m3u manuel.m3u
+          # Manuel: queremos que use tu PC
+          cp lista_servidor.m3u manuel.m3u
           
-          # Nota: 'maestra.m3u' se queda como la normal por defecto.
+          # Si quieres añadir a otro amigo (ejemplo: juan) que use su propio motor:
+          # cp maestra.m3u juan.m3u
+
+          # Limpieza: borrar la lista temporal del servidor para que no se suba duplicada
+          rm lista_servidor.m3u
 
       - name: Guardar cambios automáticamente
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add .
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Actualización personalizada de listas" && git push)
+          # Forzamos el commit si hay cambios, y si no, no pasa nada
+          if ! git diff --cached --quiet; then
+            git commit -m "Actualización: $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+          else
+            echo "No hay cambios que guardar."
+          fi
