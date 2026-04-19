@@ -19,12 +19,12 @@ jobs:
 
       - name: Procesar Listas
         run: |
-          # 1. Descargamos la lista original (la que tiene 127.0.0.1)
+          # 1. Descargar la lista
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           
-          # 2. Creamos una versión especial para el servidor de Tailscale
-          # Reemplazamos 127.0.0.1 por tu IP de Tailscale
-          sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u > lista_servidor.m3u
+          # 2. Crear la versión de servidor limpiando caracteres extraños
+          # Usamos 'tr' para asegurar que los saltos de línea sean correctos
+          sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u | tr -d '\r' > lista_servidor.m3u
 
           # 3. ASIGNACIÓN PERSONALIZADA
           # Aquí tú eliges qué versión le das a cada archivo:
