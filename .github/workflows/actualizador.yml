@@ -7,6 +7,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=0&single=true&output=csv"
 
 jobs:
   build:
@@ -24,30 +25,44 @@ jobs:
           # 1. Descargar la lista maestra original
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           
-          # 2. Crear la versión para tu servidor (Tailscale IP)
-          # Limpiamos retornos de carro (\r) para que sea compatible con todo
+          # 2. Crear la versión base para el servidor (Tailscale IP)
           sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u | tr -d '\r' > lista_servidor.m3u
 
-          # 3. ASIGNACIÓN FORZADA (Crea los archivos aunque no existan)
-          
-          # Manuel: queremos que use tu PC
-          cp lista_servidor.m3u manuel.m3u
-          
-          # Si quieres añadir a otro amigo (ejemplo: juan) que use su propio motor:
-          # cp maestra.m3u juan.m3u
+          # 3. Descargar base de datos de usuarios desde Google Sheets
+          curl -L "$URL_EXCEL" -o usuarios.csv
 
-          # Limpieza: borrar la lista temporal del servidor para que no se suba duplicada
-          rm lista_servidor.m3u
+          # 4. LIMPIEZA TOTAL: Borramos archivos .m3u antiguos para evitar usuarios que ya no están en el Excel
+          # Mantenemos solo maestra.m3u y lista_servidor.m3u durante el proceso
+          find . -name "*.m3u" ! -name "maestra.m3u" ! -name "lista_servidor.m3u" -delete
+
+          # 5. GENERACIÓN DINÁMICA: Leer el Excel y crear archivos según el pago
+          # Saltamos la cabecera y leemos Nombre (columna A) y Pago (columna B)
+          tail -n +2 usuarios.csv | while IFS=',' read -r nombre pago || [ -n "$nombre" ]; do
+            # Limpiamos espacios y pasamos a minúsculas para evitar errores de escritura
+            USER=$(echo $nombre | xargs | tr '[:upper:]' '[:lower:]')
+            STATUS=$(echo $pago | xargs | tr '[:upper:]' '[:lower:]')
+
+            if [ "$STATUS" = "sí" ] || [ "$STATUS" = "si" ]; then
+              echo "Generando lista activa para: $USER"
+              # Creamos el archivo con una cabecera de fecha para asegurar que GitHub detecte cambios
+              echo "# Lista para $USER - Actualizada: $(date +'%d/%m/%Y %H:%M')" > "${USER}.m3u"
+              cat lista_servidor.m3u >> "${USER}.m3u"
+            else
+              echo "Usuario $USER omitido (Estado de pago: $STATUS)"
+            fi
+          done
+
+          # Limpieza de archivos temporales
+          rm lista_servidor.m3u usuarios.csv
 
       - name: Guardar cambios automáticamente
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add .
-          # Forzamos el commit si hay cambios, y si no, no pasa nada
           if ! git diff --cached --quiet; then
-            git commit -m "Actualización: $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Sincronización Excel: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           else
-            echo "No hay cambios que guardar."
+            echo "No hay cambios en los estados de pago."
           fi
