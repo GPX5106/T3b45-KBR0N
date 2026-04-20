@@ -8,6 +8,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=2124629301&single=true&output=csv"
+  IP_SERVIDOR: "100.105.227.99"
 
 jobs:
   build:
@@ -26,7 +27,7 @@ jobs:
           curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           curl -L "$URL_EXCEL" -o usuarios.csv
 
-          # 2. Crear carpeta temporal para no borrar lo que ya tenemos antes de comparar
+          # 2. Crear carpeta temporal
           mkdir -p temp_listas
 
           # 3. GENERACIÓN POR FECHA DE VENCIMIENTO
@@ -47,27 +48,32 @@ jobs:
               FILE_LOCAL="${USER}(local).m3u"
               FILE_SERVI="${USER}(servidor).m3u"
               
-              # COMPROBACIÓN: Si el archivo NO existe en el repo actual, es un ALTA NUEVA
+              # Comprobación de ALTA NUEVA
               if [ ! -f "$FILE_LOCAL" ]; then
                 ES_NUEVO=true
               else
                 ES_NUEVO=false
               fi
 
-              # Creamos los archivos en la carpeta temporal
-              echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_LOCAL"
-              cat maestra.m3u >> "temp_listas/$FILE_LOCAL"
+              # Lista LOCAL (usa 127.0.0.1)
+              echo "#EXTM3U" > "temp_listas/$FILE_LOCAL"
+              echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" >> "temp_listas/$FILE_LOCAL"
+              cat maestra.m3u | grep -v "#EXTM3U" >> "temp_listas/$FILE_LOCAL"
 
-              echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI"
-              sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
+              # Lista SERVIDOR (usa la IP de Tailscale de la Uni)
+              echo "#EXTM3U" > "temp_listas/$FILE_SERVI"
+              echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" >> "temp_listas/$FILE_SERVI"
+              # Reemplazamos tanto 127.0.0.1 como cualquier IP vieja que hubiera por la nueva
+              sed 's|127.0.0.1|'$IP_SERVIDOR'|g; s|100.98.88.79|'$IP_SERVIDOR'|g' maestra.m3u | grep -v "#EXTM3U" >> "temp_listas/$FILE_SERVI"
 
-              # 4. NOTIFICACIÓN: Solo si es un alta nueva
+              # 4. NOTIFICACIÓN TELEGRAM
               if [ "$ES_NUEVO" = true ]; then
                 echo "🚀 Notificando nueva alta: $USER"
+                # Codificar URLs para Telegram
                 URL_L="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_LOCAL | sed 's/(/%28/g; s/)/%29/g')"
                 URL_S="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_SERVI | sed 's/(/%28/g; s/)/%29/g')"
                 
-                MESSAGE="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>Enlace LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>Enlace SERVIDOR:</b>%0A<code>${URL_S}</code>"
+                MESSAGE="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>Enlace LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>Enlace SERVIDOR (Uni):</b>%0A<code>${URL_S}</code>"
                 
                 curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
                   -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
@@ -77,8 +83,7 @@ jobs:
             fi
           done
 
-          # 5. LIMPIEZA Y SUSTITUCIÓN:
-          # Borramos todos los m3u del repo (excepto maestra.m3u) y movemos los nuevos
+          # 5. LIMPIEZA Y SUSTITUCIÓN
           find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" -delete
           mv temp_listas/*.m3u . 2>/dev/null || true
           
@@ -90,8 +95,8 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           if ! git diff --cached --quiet; then
-            git commit -m "Sincronización inteligente (Local/Servidor): $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Sincronización AceStream (IP: $IP_SERVIDOR): $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           else
-            echo "Sin cambios (no hay usuarios nuevos)."
+            echo "Sin cambios en los usuarios."
           fi
