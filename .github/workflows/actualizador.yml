@@ -1,113 +1,193 @@
 name: Actualizar Listas Diariamente
 
+
+
 on:
+
   schedule:
+
     - cron: '0 * * * *' # Se ejecuta cada hora
+
   workflow_dispatch: 
 
+
+
 env:
+
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
   URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=2124629301&single=true&output=csv"
-  URL_EXTERNA: "https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/data/listas/lista_iptv.m3u"
+
+
 
 jobs:
+
   build:
+
     runs-on: ubuntu-latest
+
     permissions:
+
       contents: write
+
     steps:
+
       - name: Checkout del repositorio
+
         uses: actions/checkout@v4
+
         with:
+
           fetch-depth: 0
 
+
+
       - name: Procesar Listas
+
         run: |
-          # 1. Descargar lista maestra (con reintentos en distintos gateways por si falla uno)
-          echo "Descargando lista maestra..."
-          curl -L --retry 3 "https://cloudflare-ipfs.com/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u || \
-          curl -L --retry 3 "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u || \
-          curl -L --retry 3 "https://dweb.link/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u
 
-          # Descargar lista externa y CSV
-          echo "Descargando lista externa y usuarios..."
-          curl -L --retry 3 "$URL_EXTERNA" -o lista_externa.m3u
-          curl -L --retry 3 "$URL_EXCEL" -o usuarios.csv
+          # 1. Descargar la lista maestra original y el CSV
 
-          # 2. Extraer el grupo MOTOR y sus canales de la lista externa
-          echo "Filtrando canales de MOTOR..."
-          echo -e "\n# --- SECCIÓN MOTOR ---" > motor.m3u
-          awk '/group-title="MOTOR"/{print; flag=1; next} /#EXTGRP: group-title="/{flag=0} flag' lista_externa.m3u >> motor.m3u
-          
-          # Limpiar líneas vacías del filtro
-          sed -i '/^$/d' motor.m3u
+          curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
 
-          # 3. Fusión Final: Maestra + Motor
-          cat maestra_base.m3u motor.m3u > maestra.m3u
+          curl -L "$URL_EXCEL" -o usuarios.csv
 
-          # 4. Crear carpeta temporal
+
+
+          # 2. Crear carpeta temporal para no borrar lo que ya tenemos antes de comparar
+
           mkdir -p temp_listas
 
-          # 5. GENERACIÓN POR FECHA DE VENCIMIENTO
+
+
+          # 3. GENERACIÓN POR FECHA DE VENCIMIENTO
+
           AHORA=$(date +%s)
 
+
+
           tail -n +2 usuarios.csv | while IFS=',' read -r basura nombre vencimiento || [ -n "$nombre" ]; do
+
             
+
             USER=$(echo "$nombre" | xargs | tr '[:upper:]' '[:lower:]' | tr -d '\r')
+
             FECHA_FIN=$(echo "$vencimiento" | xargs | tr -d '\r')
+
+
 
             [ -z "$USER" ] && continue
 
+
+
             FECHA_ISO=$(echo "$FECHA_FIN" | awk -F'/' '{print $3"-"$2"-"$1}')
+
             FECHA_LIMITE_SEC=$(date -d "$FECHA_ISO" +%s 2>/dev/null || echo 0)
+
             FECHA_LIMITE_FIN_DIA=$((FECHA_LIMITE_SEC + 86399))
 
+
+
             if [ "$FECHA_LIMITE_FIN_DIA" -ge "$AHORA" ]; then
+
               FILE_LOCAL="${USER}(local).m3u"
+
               FILE_SERVI="${USER}(servidor).m3u"
+
               
+
+              # COMPROBACIÓN: Si el archivo NO existe en el repo actual, es un ALTA NUEVA
+
               if [ ! -f "$FILE_LOCAL" ]; then
+
                 ES_NUEVO=true
+
               else
+
                 ES_NUEVO=false
+
               fi
+
+
 
               # Creamos los archivos en la carpeta temporal
+
               echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_LOCAL"
+
               cat maestra.m3u >> "temp_listas/$FILE_LOCAL"
 
+
+
               echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI"
+
               sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
 
-              # 6. NOTIFICACIÓN TELEGRAM (Solo altas nuevas)
+
+
+              # 4. NOTIFICACIÓN: Solo si es un alta nueva
+
               if [ "$ES_NUEVO" = true ]; then
+
                 echo "🚀 Notificando nueva alta: $USER"
+
                 URL_L="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_LOCAL | sed 's/(/%28/g; s/)/%29/g')"
+
                 URL_S="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_SERVI | sed 's/(/%28/g; s/)/%29/g')"
+
                 
+
                 MESSAGE="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>Enlace LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>Enlace SERVIDOR:</b>%0A<code>${URL_S}</code>"
+
                 
+
                 curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+
                   -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+
                   -d "text=${MESSAGE}" \
+
                   -d "parse_mode=HTML"
+
               fi
+
             fi
+
           done
 
-          # 7. LIMPIEZA
+
+
+          # 5. LIMPIEZA Y SUSTITUCIÓN:
+
+          # Borramos todos los m3u del repo (excepto maestra.m3u) y movemos los nuevos
+
           find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" -delete
+
           mv temp_listas/*.m3u . 2>/dev/null || true
-          rm -rf temp_listas usuarios.csv maestra_base.m3u lista_externa.m3u motor.m3u
+
+          
+
+          rm -rf temp_listas usuarios.csv
+
+
 
       - name: Guardar cambios automáticamente
+
         run: |
+
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
           git config --local user.name "github-actions[bot]"
+
           git add .
+
           if ! git diff --cached --quiet; then
-            git commit -m "Sincronización Total + Motor: $(date +'%Y-%m-%d %H:%M:%S')"
+
+            git commit -m "Sincronización inteligente (Local/Servidor): $(date +'%Y-%m-%d %H:%M:%S')"
+
             git push
+
           else
+
             echo "Sin cambios (no hay usuarios nuevos)."
+
           fi
