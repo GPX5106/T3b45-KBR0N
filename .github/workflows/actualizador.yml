@@ -8,6 +8,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=2124629301&single=true&output=csv"
+  URL_EXTERNA: "https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/data/listas/lista_iptv.m3u"
 
 jobs:
   build:
@@ -22,14 +23,27 @@ jobs:
 
       - name: Procesar Listas
         run: |
-          # 1. Descargar la lista maestra original y el CSV
-          curl -L "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
-          curl -L "$URL_EXCEL" -o usuarios.csv
+          # 1. Descargar la lista maestra original, la externa y el CSV
+          # Usamos --retry para evitar el error 56 de curl que tuviste antes
+          curl -L --retry 3 "https://cloudflare-ipfs.com/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u
+          curl -L --retry 3 "$URL_EXTERNA" -o lista_externa.m3u
+          curl -L --retry 3 "$URL_EXCEL" -o usuarios.csv
 
-          # 2. Crear carpeta temporal para no borrar lo que ya tenemos antes de comparar
+          # 2. Extraer solo la sección MOTOR de la lista externa
+          # Este comando busca desde 'group-title="MOTOR"' hasta la siguiente sección o fin de archivo
+          echo -e "\n# --- SECCIÓN MOTOR EXTRAÍDA ---" > motor.m3u
+          awk '/group-title="MOTOR"/{flag=1;next}/group-title="/{flag=0}flag' lista_externa.m3u >> motor.m3u
+          
+          # Limpiar el archivo motor (quitar líneas vacías extra si las hay)
+          sed -i '/^$/d' motor.m3u
+
+          # 3. Fusionar maestra base con motor
+          cat maestra_base.m3u motor.m3u > maestra.m3u
+
+          # 4. Crear carpeta temporal
           mkdir -p temp_listas
 
-          # 3. GENERACIÓN POR FECHA DE VENCIMIENTO
+          # 5. GENERACIÓN POR FECHA DE VENCIMIENTO
           AHORA=$(date +%s)
 
           tail -n +2 usuarios.csv | while IFS=',' read -r basura nombre vencimiento || [ -n "$nombre" ]; do
@@ -47,21 +61,21 @@ jobs:
               FILE_LOCAL="${USER}(local).m3u"
               FILE_SERVI="${USER}(servidor).m3u"
               
-              # COMPROBACIÓN: Si el archivo NO existe en el repo actual, es un ALTA NUEVA
               if [ ! -f "$FILE_LOCAL" ]; then
                 ES_NUEVO=true
               else
                 ES_NUEVO=false
               fi
 
-              # Creamos los archivos en la carpeta temporal
+              # Creamos archivos locales
               echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_LOCAL"
               cat maestra.m3u >> "temp_listas/$FILE_LOCAL"
 
+              # Creamos archivos servidor (reemplazando IP de AceStream)
               echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI"
               sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
 
-              # 4. NOTIFICACIÓN: Solo si es un alta nueva
+              # 6. NOTIFICACIÓN TELEGRAM
               if [ "$ES_NUEVO" = true ]; then
                 echo "🚀 Notificando nueva alta: $USER"
                 URL_L="https://raw.githubusercontent.com/${{ github.repository }}/main/$(echo $FILE_LOCAL | sed 's/(/%28/g; s/)/%29/g')"
@@ -77,12 +91,11 @@ jobs:
             fi
           done
 
-          # 5. LIMPIEZA Y SUSTITUCIÓN:
-          # Borramos todos los m3u del repo (excepto maestra.m3u) y movemos los nuevos
+          # 7. LIMPIEZA
           find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" -delete
           mv temp_listas/*.m3u . 2>/dev/null || true
           
-          rm -rf temp_listas usuarios.csv
+          rm -rf temp_listas usuarios.csv maestra_base.m3u lista_externa.m3u motor.m3u
 
       - name: Guardar cambios automáticamente
         run: |
@@ -90,8 +103,8 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           if ! git diff --cached --quiet; then
-            git commit -m "Sincronización inteligente (Local/Servidor): $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "Sincronización total + Motor: $(date +'%Y-%m-%d %H:%M:%S')"
             git push
           else
-            echo "Sin cambios (no hay usuarios nuevos)."
+            echo "Sin cambios detectados."
           fi
