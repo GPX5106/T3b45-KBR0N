@@ -23,10 +23,18 @@ jobs:
 
       - name: Procesar Listas
         run: |
-          # 1. Descargar la lista maestra original, la externa y el CSV
-          # Usamos --retry para evitar el error 56 de curl que tuviste antes
-          curl -L --retry 3 "https://cloudflare-ipfs.com/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u
-          curl -L --retry 3 "$URL_EXTERNA" -o lista_externa.m3u
+          # 1. Descargar la lista maestra original (Multi-Gateway)
+          echo "Descargando lista maestra..."
+          curl -L --retry 2 "https://cloudflare-ipfs.com/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u || \
+          curl -L --retry 2 "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u || \
+          curl -L --retry 2 "https://dweb.link/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra_base.m3u
+
+          # Descargar la externa
+          echo "Descargando lista externa..."
+          curl -L --retry 3 "$URL_EXTERNA" -o lista_externa.m3u || echo "Error descargando externa, se omitirá el motor"
+
+          # Descargar el CSV
+          echo "Descargando CSV de usuarios..."
           curl -L --retry 3 "$URL_EXCEL" -o usuarios.csv
 
           # 2. Extraer solo la sección MOTOR de la lista externa
