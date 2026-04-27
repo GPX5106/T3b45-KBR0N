@@ -1,27 +1,4 @@
-name: Actualizar Listas Diariamente
-
-on:
-  schedule:
-    - cron: '0 * * * *' # Se ejecuta cada hora
-  workflow_dispatch: 
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=2124629301&single=true&output=csv"
-  URL_EXTERNA: "https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/data/listas/lista_iptv.m3u"
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout del repositorio
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Procesar Listas
+- name: Procesar Listas
         run: |
           # 1. Descargar la lista maestra original (Multi-Gateway)
           echo "Descargando lista maestra..."
@@ -31,18 +8,20 @@ jobs:
 
           # Descargar la externa
           echo "Descargando lista externa..."
-          curl -L --retry 3 "$URL_EXTERNA" -o lista_externa.m3u || echo "Error descargando externa, se omitirá el motor"
+          curl -L --retry 3 "$URL_EXTERNA" -o lista_externa.m3u || echo "Error descargando externa"
 
           # Descargar el CSV
           echo "Descargando CSV de usuarios..."
           curl -L --retry 3 "$URL_EXCEL" -o usuarios.csv
 
-          # 2. Extraer solo la sección MOTOR de la lista externa
-          # Este comando busca desde 'group-title="MOTOR"' hasta la siguiente sección o fin de archivo
-          echo -e "\n# --- SECCIÓN MOTOR EXTRAÍDA ---" > motor.m3u
-          awk '/group-title="MOTOR"/{flag=1;next}/group-title="/{flag=0}flag' lista_externa.m3u >> motor.m3u
+          # 2. Extraer el grupo MOTOR y sus canales
+          echo "Extrayendo sección MOTOR..."
+          echo -e "\n# --- SECCIÓN MOTOR ---" > motor.m3u
           
-          # Limpiar el archivo motor (quitar líneas vacías extra si las hay)
+          # Buscamos la línea del grupo y todas las líneas INF y URL que le siguen hasta el siguiente grupo
+          awk '/group-title="MOTOR"/{print; flag=1; next} /group-title="/{flag=0} flag' lista_externa.m3u >> motor.m3u
+          
+          # Limpiar líneas vacías
           sed -i '/^$/d' motor.m3u
 
           # 3. Fusionar maestra base con motor
@@ -75,11 +54,11 @@ jobs:
                 ES_NUEVO=false
               fi
 
-              # Creamos archivos locales
+              # Generar Local
               echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_LOCAL"
               cat maestra.m3u >> "temp_listas/$FILE_LOCAL"
 
-              # Creamos archivos servidor (reemplazando IP de AceStream)
+              # Generar Servidor
               echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI"
               sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
 
@@ -102,17 +81,4 @@ jobs:
           # 7. LIMPIEZA
           find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" -delete
           mv temp_listas/*.m3u . 2>/dev/null || true
-          
           rm -rf temp_listas usuarios.csv maestra_base.m3u lista_externa.m3u motor.m3u
-
-      - name: Guardar cambios automáticamente
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add .
-          if ! git diff --cached --quiet; then
-            git commit -m "Sincronización total + Motor: $(date +'%Y-%m-%d %H:%M:%S')"
-            git push
-          else
-            echo "Sin cambios detectados."
-          fi
