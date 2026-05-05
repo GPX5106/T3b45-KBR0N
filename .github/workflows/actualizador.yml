@@ -1,4 +1,4 @@
-Name: Actualizar Listas Diariamente
+name: Actualizar Listas Diariamente
 
 on:
   schedule:
