@@ -24,16 +24,26 @@ jobs:
       - name: Procesar Listas
         run: |
           # 1. Descargar las listas maestras y el CSV
-          # Usamos gateways alternativos por si falla el principal de ipfs.io
           curl -L --retry 3 "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u || curl -L "https://cloudflare-ipfs.com/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
           curl -L --retry 3 "$URL_NEWERA" -o newera_base.m3u
           curl -L --retry 3 "$URL_EXCEL" -o usuarios.csv
 
           mkdir -p temp_listas
-
-          # 2. GENERACIÓN POR FECHA DE VENCIMIENTO
           AHORA=$(date +%s)
 
+          # 2. LIMPIEZA DE ARCHIVOS MARCADOS PARA BORRAR (Si ya pasó la semana)
+          for f in *.vence; do
+            if [ -f "$f" ]; then
+              FECHA_BORRADO=$(cat "$f")
+              if [ "$AHORA" -ge "$FECHA_BORRADO" ]; then
+                BASENAME=$(basename "$f" .vence)
+                echo "🗑️ Plazo de 7 días cumplido. Borrando permanentemente: $BASENAME"
+                rm -f "${BASENAME}(local).m3u" "${BASENAME}(servidor).m3u" "${BASENAME}(newera).m3u" "$f"
+              fi
+            fi
+          done
+
+          # 3. GENERACIÓN POR FECHA DE VENCIMIENTO
           tail -n +2 usuarios.csv | while IFS=',' read -r basura nombre vencimiento || [ -n "$nombre" ]; do
             
             USER=$(echo "$nombre" | xargs | tr '[:upper:]' '[:lower:]' | tr -d '\r')
@@ -45,54 +55,59 @@ jobs:
             FECHA_LIMITE_SEC=$(date -d "$FECHA_ISO" +%s 2>/dev/null || echo 0)
             FECHA_LIMITE_FIN_DIA=$((FECHA_LIMITE_SEC + 86399))
 
-            if [ "$FECHA_LIMITE_FIN_DIA" -ge "$AHORA" ]; then
-              FILE_LOCAL="${USER}(local).m3u"
-              FILE_SERVI="${USER}(servidor).m3u"
-              FILE_NEWER="${USER}(newera).m3u"
-              
-              if [ ! -f "$FILE_LOCAL" ]; then
-                ES_NUEVO=true
-              else
-                ES_NUEVO=false
-              fi
+            FILE_LOCAL="${USER}(local).m3u"
+            FILE_SERVI="${USER}(servidor).m3u"
+            FILE_NEWER="${USER}(newera).m3u"
 
-              # Crear archivo LOCAL
+            if [ "$FECHA_LIMITE_FIN_DIA" -ge "$AHORA" ]; then
+              # === USUARIO ACTIVO ===
+              # Si existía una marca de borrado previo (por error o re-activación), la quitamos
+              rm -f "${USER}.vence"
+
+              ES_NUEVO=$([ ! -f "$FILE_LOCAL" ] && echo "true" || echo "false")
+
               echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_LOCAL"
               cat maestra.m3u >> "temp_listas/$FILE_LOCAL"
 
-              # Crear archivo SERVIDOR
               echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI"
               sed 's|127.0.0.1|100.94.254.40|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
 
-              # Crear archivo NEW ERA
               echo "# LISTA NEW ERA PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_NEWER"
               cat newera_base.m3u >> "temp_listas/$FILE_NEWER"
 
-              # 3. NOTIFICACIÓN TELEGRAM
               if [ "$ES_NUEVO" = true ]; then
-                echo "🚀 Notificando nueva alta: $USER"
-                
-                # Helper para codificar URLs (paréntesis)
                 encode() { echo "$1" | sed 's/(/%28/g; s/)/%29/g'; }
-                
                 URL_L="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_LOCAL")"
                 URL_S="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_SERVI")"
                 URL_N="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_NEWER")"
+                MSG="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>SERVIDOR:</b>%0A<code>${URL_S}</code>%0A%0A✨ <b>NEW ERA:</b>%0A<code>${URL_N}</code>"
+                curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" -d "text=${MSG}" -d "parse_mode=HTML"
+              fi
+            else
+              # === USUARIO CADUCADO ===
+              # Si los archivos m3u existen y NO están marcados para borrar todavía
+              if [ -f "$FILE_LOCAL" ] && [ ! -f "${USER}.vence" ]; then
+                echo "⚠️ Caducado: $USER. Vaciando y programando borrado para dentro de 7 días..."
                 
-                MESSAGE="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>SERVIDOR:</b>%0A<code>${URL_S}</code>%0A%0A✨ <b>NEW ERA:</b>%0A<code>${URL_N}</code>"
+                # Vaciamos contenido para limpiar caché del cliente
+                AVISO="#EXTM3U\n#EXTINF:-1, LISTA CADUCADA - CONTACTA CON SOPORTE\nhttp://0.0.0.0"
+                echo -e "$AVISO" > "temp_listas/$FILE_LOCAL"
+                echo -e "$AVISO" > "temp_listas/$FILE_SERVI"
+                echo -e "$AVISO" > "temp_listas/$FILE_NEWER"
                 
-                curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
-                  -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-                  -d "text=${MESSAGE}" \
-                  -d "parse_mode=HTML"
+                # Creamos marca: Fecha de hoy + 7 días (604800 segundos)
+                echo $((AHORA + 604800)) > "temp_listas/${USER}.vence"
+                
+                # Limpiar caché de jsDelivr para asegurar que el cliente vea el vacío
+                curl -s "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/${FILE_LOCAL}" > /dev/null
               fi
             fi
           done
 
-          # 4. LIMPIEZA Y SUSTITUCIÓN:
-          # Borramos m3u antiguos (excepto las bases) y movemos los nuevos
+          # 5. LIMPIEZA Y SUSTITUCIÓN
           find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" ! -name "newera_base.m3u" -delete
           mv temp_listas/*.m3u . 2>/dev/null || true
+          mv temp_listas/*.vence . 2>/dev/null || true
           
           rm -rf temp_listas usuarios.csv newera_base.m3u
 
@@ -102,8 +117,9 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add .
           if ! git diff --cached --quiet; then
-            git commit -m "Sincronización Pro (Local/Servidor/NewEra): $(date +'%Y-%m-%d %H:%M:%S')"
-            git push
+            git commit -m "Sincronización Inteligente (Borrado programado 7 días): $(date +'%Y-%m-%d %H:%M:%S')"
+            git pull --rebase origin main
+            git push origin main
           else
-            echo "Sin cambios en los usuarios."
+            echo "Sin cambios."
           fi
