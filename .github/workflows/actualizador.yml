@@ -75,9 +75,9 @@ jobs:
                 # Helper para codificar URLs (paréntesis)
                 encode() { echo "$1" | sed 's/(/%28/g; s/)/%29/g'; }
                 
-                URL_L="https://raw.githubusercontent.com/${{ github.repository }}/main/$(encode "$FILE_LOCAL")"
-                URL_S="https://raw.githubusercontent.com/${{ github.repository }}/main/$(encode "$FILE_SERVI")"
-                URL_N="https://raw.githubusercontent.com/${{ github.repository }}/main/$(encode "$FILE_NEWER")"
+                URL_L="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_LOCAL")"
+                URL_S="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_SERVI")"
+                URL_N="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_NEWER")"
                 
                 MESSAGE="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>SERVIDOR:</b>%0A<code>${URL_S}</code>%0A%0A✨ <b>NEW ERA:</b>%0A<code>${URL_N}</code>"
                 
