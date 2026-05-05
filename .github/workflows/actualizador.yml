@@ -62,7 +62,7 @@ jobs:
 
               # Crear archivo SERVIDOR
               echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI"
-              sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
+              sed 's|127.0.0.1|100.94.254.40|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
 
               # Crear archivo NEW ERA
               echo "# LISTA NEW ERA PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_NEWER"
