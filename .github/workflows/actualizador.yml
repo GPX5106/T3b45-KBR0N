@@ -50,6 +50,55 @@ jobs:
             FECHA_FIN=$(echo "$vencimiento" | xargs | tr -d '\r')
 
             [ -z "$USER" ] && continue
+## ... (resto del inicio del workflow igual)
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=2124629301&single=true&output=csv"
+  URL_NEWERA: "https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/data/listas/lista_iptv.m3u"
+  URL_ACESTREAM: "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes_acestream.m3u"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Procesar Listas
+        run: |
+          # 1. Descargar las listas maestras, Acestream y el CSV
+          curl -L --retry 3 "https://ipfs.io/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u || curl -L "https://cloudflare-ipfs.com/ipns/k51qzi5uqu5di462t7j4vu4akwfhvtjhy88qbupktvoacqfqe9uforjvhyi4wr/hashes.m3u" -o maestra.m3u
+          curl -L --retry 3 "$URL_NEWERA" -o newera_base.m3u
+          curl -L --retry 3 "$URL_ACESTREAM" -o acestream_base.m3u
+          curl -L --retry 3 "$URL_EXCEL" -o usuarios.csv
+
+          mkdir -p temp_listas
+          AHORA=$(date +%s)
+
+          # 2. LIMPIEZA DE ARCHIVOS MARCADOS PARA BORRAR
+          for f in *.vence; do
+            if [ -f "$f" ]; then
+              FECHA_BORRADO=$(cat "$f")
+              if [ "$AHORA" -ge "$FECHA_BORRADO" ]; then
+                BASENAME=$(basename "$f" .vence)
+                echo "🗑️ Borrando permanentemente: $BASENAME"
+                rm -f "${BASENAME}(local).m3u" "${BASENAME}(servidor).m3u" "${BASENAME}(newera).m3u" "${BASENAME}(acestream).m3u" "$f"
+              fi
+            fi
+          done
+
+          # 3. GENERACIÓN POR FECHA DE VENCIMIENTO
+          tail -n +2 usuarios.csv | while IFS=',' read -r basura nombre vencimiento || [ -n "$nombre" ]; do
+            
+            USER=$(echo "$nombre" | xargs | tr '[:upper:]' '[:lower:]' | tr -d '\r')
+            FECHA_FIN=$(echo "$vencimiento" | xargs | tr -d '\r')
+
+            [ -z "$USER" ] && continue
 
             FECHA_ISO=$(echo "$FECHA_FIN" | awk -F'/' '{print $3"-"$2"-"$1}')
             FECHA_LIMITE_SEC=$(date -d "$FECHA_ISO" +%s 2>/dev/null || echo 0)
@@ -58,14 +107,13 @@ jobs:
             FILE_LOCAL="${USER}(local).m3u"
             FILE_SERVI="${USER}(servidor).m3u"
             FILE_NEWER="${USER}(newera).m3u"
+            FILE_ACE="${USER}(acestream).m3u"
 
             if [ "$FECHA_LIMITE_FIN_DIA" -ge "$AHORA" ]; then
-              # === USUARIO ACTIVO ===
-              # Si existía una marca de borrado previo (por error o re-activación), la quitamos
               rm -f "${USER}.vence"
-
               ES_NUEVO=$([ ! -f "$FILE_LOCAL" ] && echo "true" || echo "false")
 
+              # Generar archivos
               echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_LOCAL"
               cat maestra.m3u >> "temp_listas/$FILE_LOCAL"
 
@@ -75,41 +123,41 @@ jobs:
               echo "# LISTA NEW ERA PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_NEWER"
               cat newera_base.m3u >> "temp_listas/$FILE_NEWER"
 
+              echo "# LISTA ACESTREAM PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_ACE"
+              cat acestream_base.m3u >> "temp_listas/$FILE_ACE"
+
               if [ "$ES_NUEVO" = true ]; then
                 encode() { echo "$1" | sed 's/(/%28/g; s/)/%29/g'; }
                 URL_L="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_LOCAL")"
                 URL_S="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_SERVI")"
                 URL_N="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_NEWER")"
-                MSG="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>SERVIDOR:</b>%0A<code>${URL_S}</code>%0A%0A✨ <b>NEW ERA:</b>%0A<code>${URL_N}</code>"
+                URL_A="https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/$(encode "$FILE_ACE")"
+                
+                MSG="🚀 <b>¡Nueva alta: ${USER}!</b>%0A%0A📅 <b>Vence:</b> ${FECHA_FIN}%0A%0A🏠 <b>LOCAL:</b>%0A<code>${URL_L}</code>%0A%0A☁️ <b>SERVIDOR:</b>%0A<code>${URL_S}</code>%0A%0A✨ <b>NEW ERA:</b>%0A<code>${URL_N}</code>%0A%0A📻 <b>ACESTREAM:</b>%0A<code>${URL_A}</code>"
                 curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" -d "text=${MSG}" -d "parse_mode=HTML"
               fi
             else
               # === USUARIO CADUCADO ===
-              # Si los archivos m3u existen y NO están marcados para borrar todavía
               if [ -f "$FILE_LOCAL" ] && [ ! -f "${USER}.vence" ]; then
-                echo "⚠️ Caducado: $USER. Vaciando y programando borrado para dentro de 7 días..."
-                
-                # Vaciamos contenido para limpiar caché del cliente
                 AVISO="#EXTM3U\n#EXTINF:-1, LISTA CADUCADA - CONTACTA CON SOPORTE\nhttp://0.0.0.0"
                 echo -e "$AVISO" > "temp_listas/$FILE_LOCAL"
                 echo -e "$AVISO" > "temp_listas/$FILE_SERVI"
                 echo -e "$AVISO" > "temp_listas/$FILE_NEWER"
-                
-                # Creamos marca: Fecha de hoy + 7 días (604800 segundos)
+                echo -e "$AVISO" > "temp_listas/$FILE_ACE"
                 echo $((AHORA + 604800)) > "temp_listas/${USER}.vence"
-                
-                # Limpiar caché de jsDelivr para asegurar que el cliente vea el vacío
                 curl -s "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/${FILE_LOCAL}" > /dev/null
               fi
             fi
           done
 
           # 5. LIMPIEZA Y SUSTITUCIÓN
-          find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" ! -name "newera_base.m3u" -delete
+          find . -maxdepth 1 -name "*.m3u" ! -name "maestra.m3u" ! -name "newera_base.m3u" ! -name "acestream_base.m3u" -delete
           mv temp_listas/*.m3u . 2>/dev/null || true
           mv temp_listas/*.vence . 2>/dev/null || true
           
-          rm -rf temp_listas usuarios.csv newera_base.m3u
+          rm -rf temp_listas usuarios.csv newera_base.m3u acestream_base.m3u
+## ... (resto del script de guardado igual)
+
 
       - name: Guardar cambios automáticamente
         run: |
