@@ -69,7 +69,7 @@ jobs:
 
               # Crear archivos m3u
               echo "# LISTA LOCAL PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_LOCAL" && cat maestra.m3u >> "temp_listas/$FILE_LOCAL"
-              echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI" && sed 's|127.0.0.1|100.98.88.79|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
+              echo "# LISTA SERVIDOR PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_SERVI" && sed 's|127.0.0.1|100.108.173.50|g' maestra.m3u >> "temp_listas/$FILE_SERVI"
               echo "# LISTA NEW ERA PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_NEWER" && cat newera_base.m3u >> "temp_listas/$FILE_NEWER"
               echo "# LISTA NEW ERA ACESTREAM PARA $USER - EXPIRA: $FECHA_FIN" > "temp_listas/$FILE_ACE" && cat newera_ace_base.m3u >> "temp_listas/$FILE_ACE"
 
