@@ -15,6 +15,8 @@
 #EXTGRP: group-title="RFEF TV" group-logo="https://rfef.es/themes/custom/rfef/img/rfef-share.png"
 #EXTGRP: group-title="TDT" group-logo="https://i.ibb.co/j9xn42jB/logo-tdt.png"
 
+#EXTINF:-1 tvg-id="La 1 HD" tvg-logo="https://i.ibb.co/Vf2GT70/la1.png" group-title="TDT",La 1 TVE 720p *
+http://100.108.173.50:6878/ace/getstream?id=02622fa2fab63847d88dc14fd9fa5c2fc35de8a8
 #EXTINF:-1 tvg-id="La 1 HD" tvg-logo="https://i.ibb.co/Vf2GT70/la1.png" group-title="TDT",La 1 TVE 720p **
 http://100.108.173.50:6878/ace/getstream?id=6a494f8e736b962d94f63425ebe3df90723af0fa
 #EXTINF:-1 tvg-id="La 1 HD" tvg-logo="https://i.ibb.co/Vf2GT70/la1.png" group-title="TDT",La 1 TVE 1080p **
@@ -43,10 +45,6 @@ http://100.108.173.50:6878/ace/getstream?id=1b25b195b1b84d4b96830410657718e9e275
 http://100.108.173.50:6878/ace/getstream?id=d07816dade862339446b6c2a16d131617a3a9389
 #EXTINF:-1 tvg-logo="https://images.hoy.cr/wp-content/uploads/2026/02/FOX.jpeg" group-title="MUNDIAL",FOX ONE 4K **
 http://100.108.173.50:6878/ace/getstream?id=f1e6e441e398910e77eb51ff452dba0a733dd27d
-#EXTINF:-1 group-title="MUNDIAL",TyC Sports 1080p **
-http://100.108.173.50:6878/ace/getstream?id=bff90de77d1aef730fbfb5beb43aa6da27ac1e10
-#EXTINF:-1 tvg-logo="https://www.sportsvideo.org/wp-content/uploads/2016/01/tennis-channel-logo-e1518530950839.jpg" group-title="TENNIS",Tennis Channel 1080p *
-http://100.108.173.50:6878/ace/getstream?id=a4cbadd19442b800727be713270fa9c917cc8582
 #EXTINF:-1 tvg-logo="https://www.sportsvideo.org/wp-content/uploads/2016/01/tennis-channel-logo-e1518530950839.jpg" group-title="TENNIS",Tennis Channel 1080p **
 http://100.108.173.50:6878/ace/getstream?id=43c549e5781f5a923b76f8f29cde122b5be164eb
 #EXTINF:-1 tvg-logo="https://github.com/davidmuma/picons_dobleM/blob/master/icon/Onetoro.png?raw=true" group-title="TOROS",Onetoro TV 1080p *
