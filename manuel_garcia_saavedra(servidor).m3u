@@ -19,6 +19,8 @@
 http://100.108.173.50:6878/ace/getstream?id=313213b3b99c0f7437f68c8ea5a7b2b6d7b8a153
 #EXTINF:-1 tvg-id="Eurosport 1 HD" tvg-logo="https://i.ibb.co/r2Yd7xD/euro1.png" group-title="EUROSPORT",Eurosport 1 1080p **
 http://100.108.173.50:6878/ace/getstream?id=8522af51ae7189b12effabbb448dcb707195ce1a
+#EXTINF:-1 tvg-id="DAZN LaLiga HD" tvg-logo="https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/spain/dazn-laliga-es.png" group-title="LA LIGA",DAZN LaLiga 720p *
+http://100.108.173.50:6878/ace/getstream?id=eb4975702ceadca7ed74f8707e17a9f55569dbb9
 #EXTINF:-1 tvg-id="DAZN LaLiga HD" tvg-logo="https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/spain/dazn-laliga-es.png" group-title="LA LIGA",DAZN LaLiga 1080p *
 http://100.108.173.50:6878/ace/getstream?id=cc108ae39f92c48f6c946763047bd1c9b7b7d889
 #EXTINF:-1 tvg-id="DAZN LaLiga HD" tvg-logo="https://raw.githubusercontent.com/tv-logo/tv-logos/refs/heads/main/countries/spain/dazn-laliga-es.png" group-title="LA LIGA",DAZN LaLiga 1080p **
