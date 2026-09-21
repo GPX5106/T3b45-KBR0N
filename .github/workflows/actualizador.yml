@@ -8,7 +8,8 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   URL_EXCEL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSl7QoufNmMoMeG-SyeB5KaqDupbAYtg_675LcwbYSQGT2JKUdXo2F_aqFRkDzBurNUH39DFSRfeG7b/pub?gid=2124629301&single=true&output=csv"
-  URL_NEWERA: "https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/data/listas/lista_iptv.m3u"
+  URL_NEWERA: "https://k51qzi5uqu5dh5qej4b9wlcr5i6vhc7rcfkekhrxqek5c9lk6gdaiik820fecs.ipns.inbrowser.link/hashes.m3u"
+  # URL_NEWERA: "https://ipfs.io/ipns/k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb/data/listas/lista_iptv.m3u"
   URL_NEWERA_ACE: "https://k2k4r8lm8tkmuxbc8lkmq1in3v0oya1p6pe9o5bu0hu30br5ko08k2gb.ipns.dweb.link/data/listas/lista_fuera_iptv.m3u"
 
 jobs:
